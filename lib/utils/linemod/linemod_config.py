@@ -15,12 +15,13 @@ diameters = {
     'iron': 30.3153,
     'lamp': 28.5155,
     'phone': 20.8394,
-    'BC283R_CPA_000': 0.165
+    'BC283R_CPA_000': 0.165,
+    'hsr': 1.28
 }
 
 # BC283R_CPA_000 als Klasse ergänzt
 
-linemod_cls_names = ['ape', 'cam', 'cat', 'duck', 'glue', 'iron', 'phone', 'benchvise', 'can', 'driller', 'eggbox', 'holepuncher', 'lamp', 'BC283R_CPA_000']
+linemod_cls_names = ['ape', 'cam', 'cat', 'duck', 'glue', 'iron', 'phone', 'benchvise', 'can', 'driller', 'eggbox', 'holepuncher', 'lamp', 'BC283R_CPA_000', 'hsr']
 
 linemod_K = np.array([[572.4114, 0., 325.2611],
                   [0., 573.57043, 242.04899],

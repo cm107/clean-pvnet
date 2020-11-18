@@ -10,7 +10,7 @@ resume: true
 train:
     optim: 'adam'
     lr: 1e-3
-    epoch: 1 # Standard: 240 Epochen
+    epoch: 100 # Standard: 240 Epochen
     milestones: (20, 40, 60, 80, 100, 120, 160, 180, 200, 220)
     gamma: 0.5
     batch_size: 1

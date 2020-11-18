@@ -1,6 +1,6 @@
 import os
 
-cuda_include='/usr/local/cuda-10.2/include'
+cuda_include='/usr/local/cuda/include'
 os.system('nvcc src/nearest_neighborhood.cu -c -o src/nearest_neighborhood.cu.o -x cu -Xcompiler -fPIC -O2 -arch=sm_52 -I {}'.format(cuda_include))
 
 from cffi import FFI
