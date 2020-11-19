@@ -8,6 +8,7 @@ from clean_pvnet.util import pvnet_pose_utils
 import numpy as np
 import torch
 from PIL import Image
+from common_utils.path_utils import get_filename
 from annotation_utils.linemod.objects import Linemod_Dataset
 import cv2
 
@@ -32,11 +33,21 @@ def draw_corners(img: np.ndarray, corner_2d: np.ndarray, color: tuple=(255, 0, 0
         )
     return result
 
+def draw_pts2d(img: np.ndarray, pts2d: np.ndarray, color: tuple=(255, 0, 0), radius: int=2) -> np.ndarray:
+    result = img.copy()
+    for x, y in pts2d.tolist():
+        result = cv2.circle(
+            img=result, center=(int(x), int(y)),
+            radius=radius, color=color, thickness=-1
+        )
+    return result
+
 network = make_network().cuda()
 epoch = custom_load_network(
     net=network,
     # weight_path='/home/clayton/workspace/git/clean-pvnet/data/model/pvnet/custom/14.pth',
-    weight_path='/home/clayton/workspace/prj/data_keep/data/misc_dataset/darwin_weights/194.pth',
+    # weight_path='/home/clayton/workspace/prj/data_keep/data/misc_dataset/darwin_weights/194.pth',
+    weight_path='/home/clayton/workspace/prj/data_keep/data/misc_dataset/linemod_weights/cat199.pth',
     resume=False,
     strict=True
 )
@@ -45,11 +56,14 @@ print(network)
 
 # Refer to clean-pvnet/lib/datasets/linemod/pvnet.py for an idea of what the input should be.
 
-img_dir = '/home/clayton/workspace/git/pvnet-rendering/test/renders1'
-dataset = Linemod_Dataset.load_from_path(f'{img_dir}/train.json')
+# img_dir = '/home/clayton/workspace/git/pvnet-rendering/test/renders1'
+# dataset = Linemod_Dataset.load_from_path(f'{img_dir}/train.json')
+img_dir = '/home/clayton/workspace/prj/data_keep/data/misc_dataset/new/LINEMOD/cat/JPEGImages'
+dataset = Linemod_Dataset.load_from_path(f'{img_dir}/../train.json')
 transforms = make_transforms(is_train=False)
 for linemod_image in dataset.images:
-    img_path = f'{img_dir}/{linemod_image.file_name}'
+    # img_path = f'{img_dir}/{linemod_image.file_name}'
+    img_path = f'{img_dir}/{get_filename(linemod_image.file_name)}'
     img = Image.open(img_path)
     orig_img = np.asarray(img)
     orig_img = cv2.cvtColor(orig_img, cv2.COLOR_RGB2BGR)
@@ -71,28 +85,6 @@ for linemod_image in dataset.images:
     gt_ann = dataset.annotations.get(image_id=linemod_image.id)[0]
     result = orig_img.copy()
 
-    # from annotation_utils.linemod.objects import LinemodCamera
-    # temp = np.array( [
-    #     [
-    #         700.0,
-    #         0.0,
-    #         320.0
-    #     ],
-    #     [
-    #         0.0,
-    #         700.0,
-    #         240.0
-    #     ],
-    #     [
-    #         0.0,
-    #         0.0,
-    #         1.0
-    #     ]
-    # ])
-    # gt_ann.K = LinemodCamera.from_matrix(temp)
-
-    # print(f'np.concatenate([{gt_ann.fps_3d.to_numpy().shape}, {gt_ann.center_3d.to_numpy().shape}], axis=0)')
-    # gt_kpt_3d = np.concatenate([gt_ann.fps_3d.to_numpy(), gt_ann.center_3d.to_numpy()], axis=0)
     gt_kpt_3d = gt_ann.fps_3d.to_list()
     gt_kpt_3d.append(gt_ann.center_3d.to_list())
     gt_kpt_3d = np.array(gt_kpt_3d)
@@ -106,12 +98,13 @@ for linemod_image in dataset.images:
     print(f'corner_2d_pred:\n{corner_2d_pred}')
 
     from common_utils.cv_drawing_utils import cv_simple_image_viewer
+    result = draw_pts2d(img=result, pts2d=gt_ann.fps_2d.to_numpy(), color=(0,255,0), radius=3)
     result = draw_corners(img=result, corner_2d=corner_2d_gt, color=(0,255,0), thickness=2)
+    result = draw_pts2d(img=result, pts2d=kpt_2d, color=(0,0,255), radius=2)
     result = draw_corners(img=result, corner_2d=corner_2d_pred, color=(0,0,255), thickness=2)
     quit_flag = cv_simple_image_viewer(img=result, preview_width=1000)
-
-    import sys
-    sys.exit()
+    if quit_flag:
+        break
 
     # anns = dataset.annotations.get(image_id=linemod_image.id)
     # for ann in anns:
