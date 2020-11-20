@@ -33,7 +33,7 @@ setup(
         'numpy',
         'opencv-python',
         'tqdm',
-        'pycocotools==2.0.0',
+        'pycocotools',
         'matplotlib==2.2.2',
         'plyfile==0.6',
         'scikit-image==0.14.2',
@@ -49,6 +49,7 @@ setup(
         'transforms3d',
         'glumpy',
         'tensorboard',
+        'pandas',
         'pylint==2.4.4',
         'pyclay-common_utils @ https://github.com/cm107/common_utils/archive/master.zip',
         'pyclay-annotation_utils @ https://github.com/cm107/annotation_utils/archive/development.zip'

@@ -2,6 +2,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 import cv2
+import pandas as pd
 from tqdm import tqdm
 from typing import List, Dict
 from PIL.JpegImagePlugin import JpegImageFile
@@ -127,7 +128,18 @@ class PVNetPrediction(BasicLoadableObject['PVNetPrediction']):
             gt_corner_3d=gt_corner_3d, K=K, pose_pred=pose_pred
         )
         return Point2D_List.from_list(corner_2d_pred, demarcation=True)
-    
+
+    def to_pnp_pred(self, gt_kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray) -> PnpPrediction:
+        pose_pred = self.to_pose_pred(gt_kpt_3d=gt_kpt_3d, K=K)
+        corner_2d_pred = self.to_corner_2d_pred(
+            gt_corner_3d=corner_3d, K=K, pose_pred=pose_pred
+        )
+        return PnpPrediction(
+            kpt_2d=self.kpt_2d,
+            pose=pose_pred,
+            corner_2d=corner_2d_pred
+        )
+
     def draw_pred(
         self, img: np.ndarray, corner_2d_pred: np.ndarray,
         color: tuple=(255,0,0), pt_radius: int=2, line_thickness: int=2
@@ -167,6 +179,21 @@ class PVNetPredictionList(
     def from_dict_list(cls, dict_list: List[dict]) -> PVNetPredictionList:
         return PVNetPredictionList([PVNetPrediction.from_dict(item_dict) for item_dict in dict_list])
 
+    def to_df(self) -> pd.DataFrame:
+        return pd.DataFrame.from_records(self.to_dict_list())
+
+    def to_pnp_pred(self, gt_kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray) -> PnpPredictionList:
+        pnp_pred_list = PnpPredictionList()
+        for pred in self:
+            pnp_pred_list.append(
+                pred.to_pnp_pred(
+                    gt_kpt_3d=gt_kpt_3d,
+                    corner_3d=corner_3d,
+                    K=K
+                )
+            )
+        return pnp_pred_list
+
     def draw(
         self, img: np.ndarray,
         gt_kpt_3d: np.ndarray, gt_corner_3d: np.ndarray, K: np.ndarray,
@@ -181,6 +208,96 @@ class PVNetPredictionList(
             )
         return result
 
+class PnpPrediction(BasicLoadableObject['PnpPrediction']):
+    def __init__(self, kpt_2d: np.ndarray, pose: np.ndarray, corner_2d: np.ndarray):
+        super().__init__()
+        self.kpt_2d = kpt_2d
+        self.pose = pose
+        self.corner_2d = corner_2d
+    
+    def to_dict(self) -> dict:
+        return {
+            'kpt_2d': self.kpt_2d.tolist(),
+            'pose': self.pose.tolist(),
+            'corner_2d': self.corner_2d.tolist()
+        }
+    
+    @classmethod
+    def from_dict(cls, item_dict: dict) -> PnpPrediction:
+        return PnpPrediction(
+            kpt_2d=np.array(item_dict['kpt_2d']),
+            pose=np.array(item_dict['pose']),
+            corner_2d=np.array(item_dict['corner_2d'])
+        )
+
+    def draw(
+        self, img: np.ndarray,
+        color: tuple=(255,0,0), pt_radius: int=2, line_thickness: int=2
+    ) -> np.ndarray:
+        result = draw_pts2d(
+            img=img, pts2d=self.kpt_2d,
+            color=color, radius=pt_radius
+        )
+        result = draw_corners(
+            img=result, corner_2d=self.corner_2d,
+            color=color, thickness=line_thickness
+        )
+        return result
+
+class PnpPredictionList(
+    BasicLoadableHandler['PnpPredictionList', 'PnpPrediction'],
+    BasicHandler['PnpPredictionList', 'PnpPrediction']
+):
+    def __init__(self, pred_list: List[PnpPrediction]=None):
+        super().__init__(obj_type=PnpPrediction, obj_list=pred_list)
+        self.pred_list = self.obj_list
+    
+    @classmethod
+    def from_dict_list(cls, dict_list: List[dict]) -> PnpPredictionList:
+        return PnpPredictionList([PnpPrediction.from_dict(item_dict) for item_dict in dict_list])
+
+    def draw(
+        self, img: np.ndarray,
+        color: tuple=(255,0,0), pt_radius: int=2, line_thickness: int=2
+    ) -> np.ndarray:
+        result = img.copy()
+        for pred in self:
+            result = pred.draw(
+                img=result,
+                color=color, pt_radius=pt_radius, line_thickness=line_thickness
+            )
+        return result
+
+class PVNetFrameResult(BasicLoadableObject['PVNetFrameResult']):
+    def __init__(self, frame: str, pred_list: PnpPredictionList=None, test_name: str=None):
+        super().__init__()
+        self.frame = frame
+        self.pred_list = pred_list if pred_list is not None else PVNetPredictionList()
+        self.test_name = test_name
+    
+    @classmethod
+    def from_dict(cls, item_dict: dict) -> PVNetFrameResult:
+        return PVNetFrameResult(
+            frame=item_dict['frame'],
+            pred_list=PVNetPredictionList.from_dict_list(item_dict['pred_list']),
+            test_name=item_dict['test_name']
+        )
+
+class PVNetFrameResultList(
+    BasicLoadableHandler['PVNetFrameResultList', 'PVNetFrameResult'],
+    BasicHandler['PVNetFrameResultList', 'PVNetFrameResult']
+):
+    def __init__(self, result_list: List[PVNetFrameResult]=None):
+        super().__init__(obj_type=PVNetFrameResult, obj_list=result_list)
+        self.result_list = self.obj_list
+    
+    @classmethod
+    def from_dict_list(cls, dict_list: List[dict]) -> PVNetFrameResultList:
+        return PVNetFrameResultList([PVNetFrameResult.from_dict(item_dict) for item_dict in dict_list])
+
+    def to_df(self) -> pd.DataFrame:
+        return pd.DataFrame.from_records(self.to_dict_list())
+    
 class PVNetInferer:
     def __init__(self, weight_path: str, vote_dim: int=18, seg_dim: int=2):
         self.network = get_res_pvnet(vote_dim, seg_dim).cuda()
@@ -241,10 +358,12 @@ class PVNetInferer:
 
     def infer_linemod_dataset(
         self, dataset: Linemod_Dataset, img_dir: str, blackout: bool=False, show_pbar: bool=True,
-        show_preview: bool=False, video_save_path: str=None, dump_dir: str=None
-    ):
+        show_preview: bool=False, video_save_path: str=None, dump_dir: str=None,
+        accumulate_pred_dump: bool=True, pred_dump_path: str=None, test_name: str=None
+    ) -> PVNetFrameResultList:
         stream_writer = StreamWriter(show_preview=show_preview, video_save_path=video_save_path, dump_dir=dump_dir)
         pbar = tqdm(total=len(dataset.images), unit='image(s)') if show_pbar else None
+        frame_result_list = PVNetFrameResultList() if pred_dump_path is not None or accumulate_pred_dump else None
         for linemod_image in dataset.images:
             file_name = get_filename(linemod_image.file_name)
             if pbar is not None:
@@ -268,6 +387,9 @@ class PVNetInferer:
             else:
                 bbox = None
             pred = self.predict(img=img, bbox=bbox)
+            if frame_result_list is not None:
+                frame_result = PVNetFrameResult(frame=file_name, pred_list=PVNetPredictionList([pred]), test_name=test_name)
+                frame_result_list.append(frame_result)
 
             gt_kpt_3d = gt_ann.fps_3d.copy()
             gt_kpt_3d.append(gt_ann.center_3d)
@@ -283,17 +405,22 @@ class PVNetInferer:
             if pbar is not None:
                 pbar.update()
         stream_writer.close()
+        if pred_dump_path is not None:
+            frame_result_list.save_to_path(pred_dump_path, overwrite=True)
         pbar.close()
+        return frame_result_list
     
     def infer_coco_dataset(
         self,
         dataset: COCO_Dataset,
         kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray,
         blackout: bool=False, dsize: (int, int)=None, show_pbar: bool=True,
-        show_preview: bool=False, video_save_path: str=None, dump_dir: str=None
-    ):
+        show_preview: bool=False, video_save_path: str=None, dump_dir: str=None,
+        accumulate_pred_dump: bool=True, pred_dump_path: str=None, test_name: str=None
+    ) -> PVNetFrameResultList:
         stream_writer = StreamWriter(show_preview=show_preview, video_save_path=video_save_path, dump_dir=dump_dir)
         pbar = tqdm(total=len(dataset.images), unit='image(s)') if show_pbar else None
+        frame_result_list = PVNetFrameResultList() if pred_dump_path is not None or accumulate_pred_dump else None
         for coco_image in dataset.images:
             file_name = get_filename(coco_image.file_name)
             if pbar is not None:
@@ -311,7 +438,7 @@ class PVNetInferer:
             orig_img = cv2.cvtColor(orig_img, cv2.COLOR_RGB2BGR)
 
             anns = dataset.annotations.get_annotations_from_imgIds([coco_image.id])
-            pred_list = PVNetPredictionList()
+            pred_list = PnpPredictionList()
             for ann in anns:
                 working_img = orig_img.copy()
                 if dsize is not None:
@@ -322,14 +449,19 @@ class PVNetInferer:
                     bbox = bbox.clip_at_bounds(frame_shape=working_img.shape)
                     working_img = bbox.crop_and_paste(src_img=working_img, dst_img=np.zeros_like(working_img))
                 pred = self.predict(img=working_img, bbox=bbox if blackout else None)
-                pred_list.append(pred)
+                pred_list.append(pred.to_pnp_pred(gt_kpt_3d=kpt_3d, corner_3d=corner_3d, K=K))
+            if frame_result_list is not None:
+                frame_result = PVNetFrameResult(frame=file_name, pred_list=pred_list, test_name=test_name)
+                frame_result_list.append(frame_result)
             result = pred_list.draw(
                 img=orig_img,
-                gt_kpt_3d=kpt_3d, gt_corner_3d=corner_3d, K=K,
                 color=(0,0,255), pt_radius=2, line_thickness=2
             )
             stream_writer.step(img=result, file_name=file_name)
             if pbar is not None:
                 pbar.update()
         stream_writer.close()
+        if pred_dump_path is not None:
+            frame_result_list.save_to_path(pred_dump_path, overwrite=True)
         pbar.close()
+        return frame_result_list
