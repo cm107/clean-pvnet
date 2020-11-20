@@ -3,17 +3,24 @@ from annotation_utils.linemod.objects import Linemod_Dataset, LinemodCamera
 from annotation_utils.coco.structs import COCO_Dataset
 
 inferer = PVNetInferer(
-    weight_path='/home/clayton/workspace/git/clean-pvnet/data/model/pvnet/custom/99.pth',
-    # weight_path='/home/clayton/workspace/prj/data_keep/data/misc_dataset/darwin_weights/194.pth'
+    # weight_path='/home/clayton/workspace/git/clean-pvnet/data/model/pvnet/custom/99.pth',
+    # weight_path='/home/clayton/workspace/prj/data_keep/data/misc_dataset/darwin_weights/194.pth',
+    weight_path='/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201119/59.pth'
 )
-img_dir = '/home/clayton/workspace/git/pvnet-rendering/test/renders1'
+# img_dir = '/home/clayton/workspace/git/pvnet-rendering/test/renders1'
+img_dir = '/home/clayton/workspace/prj/data_keep/data/misc_dataset/darwin_datasets/nihonbashi2/organized'
 linemod_dataset = Linemod_Dataset.load_from_path(f'{img_dir}/train.json')
-# inferer.infer_linemod_dataset(dataset=linemod_dataset, img_dir=img_dir, blackout=True)
+linemod_dataset.images = linemod_dataset.images[:100]
+# inferer.infer_linemod_dataset(
+#     dataset=linemod_dataset, img_dir=img_dir, blackout=True,
+#     video_save_path='train_infer.avi', show_preview=True
+# )
 
 coco_dataset = COCO_Dataset.load_from_path(
-    json_path='/home/clayton/workspace/prj/data_keep/data/toyota/dataset/sim/20200214/1/coco-data/fixed_HSR-coco.json',
-    img_dir='/home/clayton/workspace/prj/data_keep/data/toyota/dataset/sim/20200214/1/coco-data'
+    json_path='/home/clayton/workspace/prj/data_keep/data/toyota/from_toyota/20201017/20201017_robot_camera/combined/output.json',
+    img_dir='/home/clayton/workspace/prj/data_keep/data/toyota/from_toyota/20201017/20201017_robot_camera/combined'
 )
+# coco_dataset.images = coco_dataset.images[:100]
 linemod_ann_sample = linemod_dataset.annotations[0]
 kpt_3d = linemod_ann_sample.fps_3d.copy()
 kpt_3d.append(linemod_ann_sample.center_3d)
@@ -28,7 +35,6 @@ inferer.infer_coco_dataset(
     corner_3d=corner_3d,
     K=K,
     blackout=True,
-    dsize=dsize
+    dsize=dsize,
+    video_save_path='multiplicity_sim_infer.avi', show_preview=True
 )
-
-# TODO: Create COCO -> Linemod dataset conversion method

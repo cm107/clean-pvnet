@@ -2,6 +2,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 import cv2
+from tqdm import tqdm
 from typing import List, Dict
 from PIL.JpegImagePlugin import JpegImageFile
 from PIL import Image
@@ -21,6 +22,7 @@ from ..datasets.transforms import make_transforms
 from ..util import pvnet_pose_utils
 from ..util.draw_utils import draw_corners, draw_pts2d
 from ..util.error_utils import get_type_error_message
+from ..util.stream_writer import StreamWriter
 
 class PVNetPrediction(BasicLoadableObject['PVNetPrediction']):
     def __init__(self, seg: np.ndarray, vertex: np.ndarray, mask: np.ndarray, kpt_2d: np.ndarray):
@@ -237,9 +239,17 @@ class PVNetInferer:
             kpt_2d=output['kpt_2d'].detach().cpu().numpy()[0],
         )
 
-    def infer_linemod_dataset(self, dataset: Linemod_Dataset, img_dir: str, blackout: bool=False):
+    def infer_linemod_dataset(
+        self, dataset: Linemod_Dataset, img_dir: str, blackout: bool=False, show_pbar: bool=True,
+        show_preview: bool=False, video_save_path: str=None, dump_dir: str=None
+    ):
+        stream_writer = StreamWriter(show_preview=show_preview, video_save_path=video_save_path, dump_dir=dump_dir)
+        pbar = tqdm(total=len(dataset.images), unit='image(s)') if show_pbar else None
         for linemod_image in dataset.images:
-            img_path = f'{img_dir}/{get_filename(linemod_image.file_name)}'
+            file_name = get_filename(linemod_image.file_name)
+            if pbar is not None:
+                pbar.set_description(file_name)
+            img_path = f'{img_dir}/{file_name}'
             img = Image.open(img_path)
 
             orig_img = np.asarray(img)
@@ -253,6 +263,7 @@ class PVNetInferer:
                 ymin = int(gt_ann.corner_2d.to_numpy(demarcation=True)[:, 1].min())
                 ymax = int(gt_ann.corner_2d.to_numpy(demarcation=True)[:, 1].max())
                 bbox = BBox(xmin=xmin, ymin=ymin, xmax=xmax, ymax=ymax)
+                bbox = bbox.clip_at_bounds(frame_shape=result.shape)
                 result = bbox.crop_and_paste(src_img=result, dst_img=np.zeros_like(result))
             else:
                 bbox = None
@@ -268,17 +279,25 @@ class PVNetInferer:
             result = draw_corners(img=result, corner_2d=corner_2d_gt, color=(0,255,0), thickness=2)
             result = draw_pts2d(img=result, pts2d=pred.kpt_2d, color=(0,0,255), radius=2)
             result = draw_corners(img=result, corner_2d=corner_2d_pred, color=(0,0,255), thickness=2)
-            quit_flag = cv_simple_image_viewer(img=result, preview_width=1000)
-            if quit_flag:
-                break
+            stream_writer.step(img=result, file_name=file_name)
+            if pbar is not None:
+                pbar.update()
+        stream_writer.close()
+        pbar.close()
     
     def infer_coco_dataset(
         self,
         dataset: COCO_Dataset,
         kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray,
-        blackout: bool=False, dsize: (int, int)=None
+        blackout: bool=False, dsize: (int, int)=None, show_pbar: bool=True,
+        show_preview: bool=False, video_save_path: str=None, dump_dir: str=None
     ):
+        stream_writer = StreamWriter(show_preview=show_preview, video_save_path=video_save_path, dump_dir=dump_dir)
+        pbar = tqdm(total=len(dataset.images), unit='image(s)') if show_pbar else None
         for coco_image in dataset.images:
+            file_name = get_filename(coco_image.file_name)
+            if pbar is not None:
+                pbar.set_description(file_name)
             img = Image.open(coco_image.coco_url)
             orig_img_w, orig_img_h = img.size
 
@@ -300,6 +319,7 @@ class PVNetInferer:
                 else:
                     bbox = ann.bbox.copy()
                 if blackout:
+                    bbox = bbox.clip_at_bounds(frame_shape=working_img.shape)
                     working_img = bbox.crop_and_paste(src_img=working_img, dst_img=np.zeros_like(working_img))
                 pred = self.predict(img=working_img, bbox=bbox if blackout else None)
                 pred_list.append(pred)
@@ -308,6 +328,8 @@ class PVNetInferer:
                 gt_kpt_3d=kpt_3d, gt_corner_3d=corner_3d, K=K,
                 color=(0,0,255), pt_radius=2, line_thickness=2
             )
-            quit_flag = cv_simple_image_viewer(img=result, preview_width=1000)
-            if quit_flag:
-                break
+            stream_writer.step(img=result, file_name=file_name)
+            if pbar is not None:
+                pbar.update()
+        stream_writer.close()
+        pbar.close()
