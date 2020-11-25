@@ -9,7 +9,7 @@ from PIL.JpegImagePlugin import JpegImageFile
 from PIL import Image
 
 from common_utils.path_utils import get_filename
-from common_utils.common_types.point import Point3D_List, Point2D_List
+from common_utils.common_types.point import Point3D_List, Point2D_List, Point3D
 from common_utils.common_types.angle import QuaternionList
 from common_utils.common_types.bbox import BBox
 from common_utils.cv_drawing_utils import cv_simple_image_viewer
@@ -30,7 +30,9 @@ from ..util.stream_writer import StreamWriter
 def do_pnp(
     kpt_2d: np.ndarray, gt_kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray,
     camera_translation: np.ndarray=None, camera_quaternion: np.ndarray=None,
-    line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None
+    distortion: np.ndarray=None,
+    line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None,
+    units_per_meter: float=1.0
 ) -> (np.ndarray, np.ndarray, tuple):
     if line_start_point3d is None or line_end_point_3d is None:
         corner_3d_np = corner_3d.to_numpy() if isinstance(corner_3d, Point3D_List) else corner_3d
@@ -42,10 +44,11 @@ def do_pnp(
         points_3d=gt_kpt_3d,
         camera_translation=np.array([0,0,0]) if camera_translation is None else camera_translation,
         camera_quaternion=np.array([0,0,0,1]) if camera_quaternion is None else camera_quaternion,
+        distortion=distortion,
         camera_matrix=K,
         line_start_point_3d=front_center if line_start_point3d is None else line_start_point3d,
         line_end_point_3d=direction_center if line_end_point_3d is None else line_end_point_3d,
-        units_per_meter=1.0
+        units_per_meter=units_per_meter
     )
     kpt_2d_np = kpt_2d.to_numpy() if isinstance(kpt_2d, Point2D_List) else kpt_2d
     if len(kpt_2d_np[~np.all(kpt_2d_np == 0, axis=1)]) >= 6:
@@ -190,7 +193,9 @@ class PVNetPrediction(BasicLoadableObject['PVNetPrediction']):
     def to_pnp_pred(
         self, gt_kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray,
         camera_translation: np.ndarray=None, camera_quaternion: np.ndarray=None,
-        line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None
+        distortion: np.ndarray=None,
+        line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None,
+        units_per_meter: float=1.0
     ) -> PnpPrediction:
         pose_pred = self.to_pose_pred(gt_kpt_3d=gt_kpt_3d, K=K)
         corner_2d_pred = self.to_corner_2d_pred(
@@ -200,7 +205,9 @@ class PVNetPrediction(BasicLoadableObject['PVNetPrediction']):
         object_world_position, object_world_rotation, (p1, p2) = do_pnp(
             kpt_2d=self.kpt_2d, gt_kpt_3d=gt_kpt_3d, corner_3d=corner_3d, K=K,
             camera_translation=camera_translation, camera_quaternion=camera_quaternion,
-            line_start_point3d=line_start_point3d, line_end_point_3d=line_end_point_3d
+            distortion=distortion,
+            line_start_point3d=line_start_point3d, line_end_point_3d=line_end_point_3d,
+            units_per_meter=units_per_meter
         )
 
         return PnpPrediction(
@@ -254,14 +261,26 @@ class PVNetPredictionList(
     def to_df(self) -> pd.DataFrame:
         return pd.DataFrame.from_records(self.to_dict_list())
 
-    def to_pnp_pred(self, gt_kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray) -> PnpPredictionList:
+    def to_pnp_pred(
+        self, gt_kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray,
+        camera_translation: np.ndarray=None, camera_quaternion: np.ndarray=None,
+        distortion: np.ndarray=None,
+        line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None,
+        units_per_meter: float=1.0
+    ) -> PnpPredictionList:
         pnp_pred_list = PnpPredictionList()
         for pred in self:
             pnp_pred_list.append(
                 pred.to_pnp_pred(
                     gt_kpt_3d=gt_kpt_3d,
                     corner_3d=corner_3d,
-                    K=K
+                    K=K,
+                    camera_translation=camera_translation,
+                    camera_quaternion=camera_quaternion,
+                    distortion=distortion,
+                    line_start_point3d=line_start_point3d,
+                    line_end_point_3d=line_end_point_3d,
+                    units_per_meter=units_per_meter
                 )
             )
         return pnp_pred_list
@@ -295,6 +314,14 @@ class PnpPrediction(BasicLoadableObject['PnpPrediction']):
         self.p1 = p1
         self.p2 = p2
     
+    @property
+    def position(self) -> Point3D:
+        return Point3D.from_list(self.object_world_position.tolist())
+    
+    @property
+    def distance_from_camera(self) -> float:
+        return self.position.distance(Point3D.origin())
+
     def to_dict(self) -> dict:
         return {
             'kpt_2d': self.kpt_2d.tolist() if self.kpt_2d is not None else None,
@@ -334,17 +361,23 @@ class PnpPrediction(BasicLoadableObject['PnpPrediction']):
     def from_kpt_2d(
         cls, kpt_2d: np.ndarray, gt_kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray,
         camera_translation: np.ndarray=None, camera_quaternion: np.ndarray=None,
-        line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None
+        distortion: np.ndarray=None,
+        line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None,
+        units_per_meter: float=1.0
     ) -> PnpPrediction:
-        pose_pred = self.to_pose_pred(gt_kpt_3d=gt_kpt_3d, K=K)
-        corner_2d_pred = self.to_corner_2d_pred(
+        pose_pred = calc_pose_pred(
+            kpt_2d=kpt_2d, gt_kpt_3d=gt_kpt_3d, K=K
+        )
+        corner_2d_pred = calc_corner_2d_pred(
             gt_corner_3d=corner_3d, K=K, pose_pred=pose_pred
         )
 
         object_world_position, object_world_rotation, (p1, p2) = do_pnp(
-            kpt_2d=self.kpt_2d, gt_kpt_3d=gt_kpt_3d, corner_3d=corner_3d, K=K,
+            kpt_2d=kpt_2d, gt_kpt_3d=gt_kpt_3d, corner_3d=corner_3d, K=K,
             camera_translation=camera_translation, camera_quaternion=camera_quaternion,
-            line_start_point3d=line_start_point3d, line_end_point_3d=line_end_point_3d
+            distortion=distortion,
+            line_start_point3d=line_start_point3d, line_end_point_3d=line_end_point_3d,
+            units_per_meter=units_per_meter
         )
         return PnpPrediction(
             kpt_2d=kpt_2d, pose=pose_pred, corner_2d=corner_2d_pred,
@@ -355,18 +388,28 @@ class PnpPrediction(BasicLoadableObject['PnpPrediction']):
     def recalculate(
         self, gt_kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray,
         camera_translation: np.ndarray=None, camera_quaternion: np.ndarray=None,
-        line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None
+        distortion: np.ndarray=None,
+        line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None,
+        units_per_meter: float=1.0
     ) -> PnpPrediction:
-        self = PnpPrediction.from_kpt_2d(
+        new = PnpPrediction.from_kpt_2d(
             kpt_2d=self.kpt_2d,
             gt_kpt_3d=gt_kpt_3d,
             corner_3d=corner_3d,
             K=K,
+            distortion=distortion,
             camera_translation=camera_translation,
             camera_quaternion=camera_quaternion,
             line_start_point3d=line_start_point3d,
-            line_end_point_3d=line_end_point_3d
+            line_end_point_3d=line_end_point_3d,
+            units_per_meter=units_per_meter
         )
+        self.pose = new.pose
+        self.corner_2d = new.corner_2d
+        self.object_world_position = new.object_world_position
+        self.object_world_rotation = new.object_world_rotation
+        self.p1 = new.p1
+        self.p2 = new.p2
 
     def draw(
         self, img: np.ndarray,
@@ -459,18 +502,6 @@ class PVNetFrameResultList(
     def to_df(self) -> pd.DataFrame:
         return pd.DataFrame.from_records(self.to_dict_list())
     
-    # def get(
-    #     self, frame: str=None, test_name: str=None, model_name: str=None
-    # ) -> PVNetFrameResultList:
-    #     return PVNetFrameResultList(
-    #         [
-    #             result for result in self \
-    #                 if (frame is None or (frame is not None and result.frame == frame)) and \
-    #                     (test_name is None or (test_name is not None and result.test_name == test_name)) and \
-    #                     (model_name is None or (model_name is not None and result.model_name == model_name))
-    #         ]
-    #     )
-
 class PVNetInferer:
     def __init__(self, weight_path: str, vote_dim: int=18, seg_dim: int=2):
         self.network = get_res_pvnet(vote_dim, seg_dim).cuda()
@@ -587,6 +618,10 @@ class PVNetInferer:
         self,
         dataset: COCO_Dataset,
         kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray,
+        camera_translation: np.ndarray=None, camera_quaternion: np.ndarray=None,
+        distortion: np.ndarray=None,
+        line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None,
+        units_per_meter: float=1.0,
         blackout: bool=False, dsize: (int, int)=None, show_pbar: bool=True,
         show_preview: bool=False, video_save_path: str=None, dump_dir: str=None,
         accumulate_pred_dump: bool=True, pred_dump_path: str=None, test_name: str=None, model_name: str=None
@@ -622,7 +657,17 @@ class PVNetInferer:
                     bbox = bbox.clip_at_bounds(frame_shape=working_img.shape)
                     working_img = bbox.crop_and_paste(src_img=working_img, dst_img=np.zeros_like(working_img))
                 pred = self.predict(img=working_img, bbox=bbox if blackout else None)
-                pred_list.append(pred.to_pnp_pred(gt_kpt_3d=kpt_3d, corner_3d=corner_3d, K=K))
+                pred_list.append(pred.to_pnp_pred(
+                    gt_kpt_3d=kpt_3d,
+                    corner_3d=corner_3d,
+                    K=K,
+                    camera_translation=camera_translation,
+                    camera_quaternion=camera_quaternion,
+                    distortion=distortion,
+                    line_start_point3d=line_start_point3d,
+                    line_end_point_3d=line_end_point_3d,
+                    units_per_meter=units_per_meter
+                ))
             if frame_result_list is not None:
                 frame_result = PVNetFrameResult(frame=file_name, pred_list=pred_list, test_name=test_name, model_name=model_name)
                 frame_result_list.append(frame_result)
