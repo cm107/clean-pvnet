@@ -5,7 +5,7 @@ from annotation_utils.coco.structs import COCO_Dataset
 inferer = PVNetInferer(
     # weight_path='/home/clayton/workspace/git/clean-pvnet/data/model/pvnet/custom/99.pth',
     # weight_path='/home/clayton/workspace/prj/data_keep/data/misc_dataset/darwin_weights/194.pth',
-    weight_path='/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201119/59.pth'
+    weight_path='/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201119/499.pth'
 )
 # img_dir = '/home/clayton/workspace/git/pvnet-rendering/test/renders1'
 img_dir = '/home/clayton/workspace/prj/data_keep/data/misc_dataset/darwin_datasets/nihonbashi2/organized'
@@ -30,5 +30,5 @@ inferer.infer_coco_dataset(
     K=K,
     blackout=True,
     dsize=dsize,
-    video_save_path='coco_infer.avi', show_preview=True
+    video_save_path='test.avi', show_preview=True
 )

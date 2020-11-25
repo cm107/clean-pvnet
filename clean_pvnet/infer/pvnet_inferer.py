@@ -17,6 +17,8 @@ from common_utils.base.basic import BasicLoadableObject, BasicLoadableHandler, B
 from annotation_utils.linemod.objects import Linemod_Dataset, LinemodCamera
 from annotation_utils.coco.structs import COCO_Dataset
 
+from model_based_angle.pnp import PnP_Model
+
 from ..networks.pvnet.resnet18 import get_res_pvnet
 from ..util.net_utils import custom_load_network
 from ..datasets.transforms import make_transforms
@@ -24,6 +26,121 @@ from ..util import pvnet_pose_utils
 from ..util.draw_utils import draw_corners, draw_pts2d
 from ..util.error_utils import get_type_error_message
 from ..util.stream_writer import StreamWriter
+
+def do_pnp(
+    kpt_2d: np.ndarray, gt_kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray,
+    camera_translation: np.ndarray=None, camera_quaternion: np.ndarray=None,
+    line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None
+) -> (np.ndarray, np.ndarray, tuple):
+    if line_start_point3d is None or line_end_point_3d is None:
+        corner_3d_np = corner_3d.to_numpy() if isinstance(corner_3d, Point3D_List) else corner_3d
+        front_center = corner_3d_np[[4, 5, 6, 7]].mean(axis=0)
+        back_center = corner_3d_np[[0, 1, 2, 3]].mean(axis=0)
+        direction_center = front_center + (front_center - back_center)
+
+    pnp_model = PnP_Model(
+        points_3d=gt_kpt_3d,
+        camera_translation=np.array([0,0,0]) if camera_translation is None else camera_translation,
+        camera_quaternion=np.array([0,0,0,1]) if camera_quaternion is None else camera_quaternion,
+        camera_matrix=K,
+        line_start_point_3d=front_center if line_start_point3d is None else line_start_point3d,
+        line_end_point_3d=direction_center if line_end_point_3d is None else line_end_point_3d,
+        units_per_meter=1.0
+    )
+    kpt_2d_np = kpt_2d.to_numpy() if isinstance(kpt_2d, Point2D_List) else kpt_2d
+    if len(kpt_2d_np[~np.all(kpt_2d_np == 0, axis=1)]) >= 6:
+        object_world_position, object_world_rotation, (p1, p2) = pnp_model.calculate_pos_and_angle(kpt_2d=kpt_2d)
+    else:
+        object_world_position, object_world_rotation, (p1, p2) = None, None, (None, None)
+
+    return object_world_position, object_world_rotation, (p1, p2)
+
+def calc_pose_pred(kpt_2d: np.ndarray, gt_kpt_3d: np.ndarray, K: np.ndarray, func_name: str='calc_pose_pred') -> np.ndarray:
+    if isinstance(kpt_2d, np.ndarray):
+        kpt_2d0 = kpt_2d.copy()
+    elif isinstance(kpt_2d, Point2D_List):
+        kpt_2d0 = kpt_2d.to_numpy(demarcation=True)
+    else:
+        raise TypeError(
+            get_type_error_message(
+                func_name=func_name,
+                acceptable_types=[np.ndarray, Point2D_List],
+                unacceptable_type=type(kpt_2d),
+                param_name='kpt_2d'
+            )
+        )
+    if isinstance(gt_kpt_3d, np.ndarray):
+        gt_kpt_3d0 = gt_kpt_3d.copy()
+    elif isinstance(gt_kpt_3d, Point3D_List):
+        gt_kpt_3d0 = gt_kpt_3d.to_numpy(demarcation=True)
+    else:
+        raise TypeError(
+            get_type_error_message(
+                func_name=func_name,
+                acceptable_types=[np.ndarray, Point3D_List],
+                unacceptable_type=type(gt_kpt_3d),
+                param_name='gt_kpt_3d'
+            )
+        )
+    if isinstance(K, np.ndarray):
+        K0 = K.copy()
+    elif isinstance(K, LinemodCamera):
+        K0 = K.to_matrix()
+    else:
+        raise TypeError(
+            get_type_error_message(
+                func_name=func_name,
+                acceptable_types=[np.ndarray, LinemodCamera],
+                unacceptable_type=type(K),
+                param_name='K'
+            )
+        )
+    return pvnet_pose_utils.pnp(gt_kpt_3d0, kpt_2d0, K0)
+
+def calc_corner_2d_pred(
+    gt_corner_3d: np.ndarray, K: np.ndarray, pose_pred: np.ndarray,
+    func_name: str='calc_corner_2d_pred'
+):
+    if isinstance(gt_corner_3d, np.ndarray):
+        gt_corner_3d0 = gt_corner_3d.copy()
+    elif isinstance(gt_corner_3d, Point3D_List):
+        gt_corner_3d0 = gt_corner_3d.to_numpy(demarcation=True)
+    else:
+        raise TypeError(
+            get_type_error_message(
+                func_name=func_name,
+                acceptable_types=[np.ndarray, Point3D_List],
+                unacceptable_type=type(gt_corner_3d),
+                param_name='gt_corner_3d'
+            )
+        )
+    if isinstance(K, np.ndarray):
+        K0 = K.copy()
+    elif isinstance(K, LinemodCamera):
+        K0 = K.to_matrix()
+    else:
+        raise TypeError(
+            get_type_error_message(
+                func_name=func_name,
+                acceptable_types=[np.ndarray, LinemodCamera],
+                unacceptable_type=type(K),
+                param_name='K'
+            )
+        )
+    if isinstance(pose_pred, np.ndarray):
+        pose_pred0 = pose_pred.copy()
+    elif isinstance(pose_pred, QuaternionList):
+        pose_pred0 = pose_pred.to_numpy()
+    else:
+        raise TypeError(
+            get_type_error_message(
+                func_name=func_name,
+                acceptable_types=[np.ndarray, QuaternionList],
+                unacceptable_type=type(pose_pred),
+                param_name='pose_pred'
+            )
+        )
+    return pvnet_pose_utils.project(gt_corner_3d0, K0, pose_pred0)
 
 class PVNetPrediction(BasicLoadableObject['PVNetPrediction']):
     def __init__(self, seg: np.ndarray, vertex: np.ndarray, mask: np.ndarray, kpt_2d: np.ndarray):
@@ -50,75 +167,16 @@ class PVNetPrediction(BasicLoadableObject['PVNetPrediction']):
         )
 
     def to_pose_pred(self, gt_kpt_3d: np.ndarray, K: np.ndarray) -> np.ndarray:
-        if isinstance(gt_kpt_3d, np.ndarray):
-            gt_kpt_3d0 = gt_kpt_3d.copy()
-        elif isinstance(gt_kpt_3d, Point3D_List):
-            gt_kpt_3d0 = gt_kpt_3d.to_numpy(demarcation=True)
-        else:
-            raise TypeError(
-                get_type_error_message(
-                    func_name=f'{type(self).__name__}.to_pose_pred',
-                    acceptable_types=[np.ndarray, Point3D_List],
-                    unacceptable_type=type(gt_kpt_3d),
-                    param_name='gt_kpt_3d'
-                )
-            )
-        if isinstance(K, np.ndarray):
-            K0 = K.copy()
-        elif isinstance(K, LinemodCamera):
-            K0 = K.to_matrix()
-        else:
-            raise TypeError(
-                get_type_error_message(
-                    func_name=f'{type(self).__name__}.to_pose_pred',
-                    acceptable_types=[np.ndarray, LinemodCamera],
-                    unacceptable_type=type(K),
-                    param_name='K'
-                )
-            )
-        return pvnet_pose_utils.pnp(gt_kpt_3d0, self.kpt_2d, K0)
+        return calc_pose_pred(
+            kpt_2d=self.kpt_2d, gt_kpt_3d=gt_kpt_3d, K=K,
+            func_name=f'{type(self).__name__}.to_pose_pred'
+        )
 
     def to_corner_2d_pred(self, gt_corner_3d: np.ndarray, K: np.ndarray, pose_pred: np.ndarray):
-        if isinstance(gt_corner_3d, np.ndarray):
-            gt_corner_3d0 = gt_corner_3d.copy()
-        elif isinstance(gt_corner_3d, Point3D_List):
-            gt_corner_3d0 = gt_corner_3d.to_numpy(demarcation=True)
-        else:
-            raise TypeError(
-                get_type_error_message(
-                    func_name=f'{type(self).__name__}.to_corner_2d_pred',
-                    acceptable_types=[np.ndarray, Point3D_List],
-                    unacceptable_type=type(gt_corner_3d),
-                    param_name='gt_corner_3d'
-                )
-            )
-        if isinstance(K, np.ndarray):
-            K0 = K.copy()
-        elif isinstance(K, LinemodCamera):
-            K0 = K.to_matrix()
-        else:
-            raise TypeError(
-                get_type_error_message(
-                    func_name=f'{type(self).__name__}.to_corner_2d_pred',
-                    acceptable_types=[np.ndarray, LinemodCamera],
-                    unacceptable_type=type(K),
-                    param_name='K'
-                )
-            )
-        if isinstance(pose_pred, np.ndarray):
-            pose_pred0 = pose_pred.copy()
-        elif isinstance(pose_pred, QuaternionList):
-            pose_pred0 = pose_pred.to_numpy()
-        else:
-            raise TypeError(
-                get_type_error_message(
-                    func_name=f'{type(self).__name__}.to_corner_2d_pred',
-                    acceptable_types=[np.ndarray, QuaternionList],
-                    unacceptable_type=type(pose_pred),
-                    param_name='pose_pred'
-                )
-            )
-        return pvnet_pose_utils.project(gt_corner_3d0, K0, pose_pred0)
+        return calc_corner_2d_pred(
+            gt_corner_3d=gt_corner_3d, K=K, pose_pred=pose_pred,
+            func_name=f'{type(self).__name__}.to_corner_2d_pred'
+        )
 
     def to_corner_2d(
         self, gt_kpt_3d: np.ndarray, gt_corner_3d: np.ndarray, K: np.ndarray
@@ -129,15 +187,29 @@ class PVNetPrediction(BasicLoadableObject['PVNetPrediction']):
         )
         return Point2D_List.from_list(corner_2d_pred, demarcation=True)
 
-    def to_pnp_pred(self, gt_kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray) -> PnpPrediction:
+    def to_pnp_pred(
+        self, gt_kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray,
+        camera_translation: np.ndarray=None, camera_quaternion: np.ndarray=None,
+        line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None
+    ) -> PnpPrediction:
         pose_pred = self.to_pose_pred(gt_kpt_3d=gt_kpt_3d, K=K)
         corner_2d_pred = self.to_corner_2d_pred(
             gt_corner_3d=corner_3d, K=K, pose_pred=pose_pred
         )
+
+        object_world_position, object_world_rotation, (p1, p2) = do_pnp(
+            kpt_2d=self.kpt_2d, gt_kpt_3d=gt_kpt_3d, corner_3d=corner_3d, K=K,
+            camera_translation=camera_translation, camera_quaternion=camera_quaternion,
+            line_start_point3d=line_start_point3d, line_end_point_3d=line_end_point_3d
+        )
+
         return PnpPrediction(
             kpt_2d=self.kpt_2d,
             pose=pose_pred,
-            corner_2d=corner_2d_pred
+            corner_2d=corner_2d_pred,
+            object_world_position=object_world_position,
+            object_world_rotation=object_world_rotation,
+            p1=p1, p2=p2
         )
 
     def draw_pred(
@@ -209,17 +281,29 @@ class PVNetPredictionList(
         return result
 
 class PnpPrediction(BasicLoadableObject['PnpPrediction']):
-    def __init__(self, kpt_2d: np.ndarray, pose: np.ndarray, corner_2d: np.ndarray):
+    def __init__(
+        self, kpt_2d: np.ndarray, pose: np.ndarray, corner_2d: np.ndarray,
+        object_world_position: np.ndarray, object_world_rotation: np.ndarray,
+        p1: tuple, p2: tuple
+    ):
         super().__init__()
         self.kpt_2d = kpt_2d
         self.pose = pose
         self.corner_2d = corner_2d
+        self.object_world_position = object_world_position
+        self.object_world_rotation = object_world_rotation
+        self.p1 = p1
+        self.p2 = p2
     
     def to_dict(self) -> dict:
         return {
-            'kpt_2d': self.kpt_2d.tolist(),
-            'pose': self.pose.tolist(),
-            'corner_2d': self.corner_2d.tolist()
+            'kpt_2d': self.kpt_2d.tolist() if self.kpt_2d is not None else None,
+            'pose': self.pose.tolist() if self.pose is not None else None,
+            'corner_2d': self.corner_2d.tolist() if self.corner_2d is not None else None,
+            'object_world_position': self.object_world_position.tolist() if self.object_world_position is not None else None,
+            'object_world_rotation': self.object_world_rotation.tolist() if self.object_world_rotation is not None else None,
+            'p1': self.p1,
+            'p2': self.p2
         }
     
     @classmethod
@@ -227,21 +311,86 @@ class PnpPrediction(BasicLoadableObject['PnpPrediction']):
         return PnpPrediction(
             kpt_2d=np.array(item_dict['kpt_2d']),
             pose=np.array(item_dict['pose']),
-            corner_2d=np.array(item_dict['corner_2d'])
+            corner_2d=np.array(item_dict['corner_2d']),
+            object_world_position=np.array(item_dict['object_world_position']),
+            object_world_rotation=np.array(item_dict['object_world_rotation']),
+            p1=item_dict['p1'],
+            p2=item_dict['p2']
+        )
+
+    def to_pose_pred(self, gt_kpt_3d: np.ndarray, K: np.ndarray) -> np.ndarray:
+        return calc_pose_pred(
+            kpt_2d=self.kpt_2d, gt_kpt_3d=gt_kpt_3d, K=K,
+            func_name=f'{type(self).__name__}.to_pose_pred'
+        )
+
+    def to_corner_2d_pred(self, gt_corner_3d: np.ndarray, K: np.ndarray, pose_pred: np.ndarray):
+        return calc_corner_2d_pred(
+            gt_corner_3d=gt_corner_3d, K=K, pose_pred=pose_pred,
+            func_name=f'{type(self).__name__}.to_corner_2d_pred'
+        )
+
+    @classmethod
+    def from_kpt_2d(
+        cls, kpt_2d: np.ndarray, gt_kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray,
+        camera_translation: np.ndarray=None, camera_quaternion: np.ndarray=None,
+        line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None
+    ) -> PnpPrediction:
+        pose_pred = self.to_pose_pred(gt_kpt_3d=gt_kpt_3d, K=K)
+        corner_2d_pred = self.to_corner_2d_pred(
+            gt_corner_3d=corner_3d, K=K, pose_pred=pose_pred
+        )
+
+        object_world_position, object_world_rotation, (p1, p2) = do_pnp(
+            kpt_2d=self.kpt_2d, gt_kpt_3d=gt_kpt_3d, corner_3d=corner_3d, K=K,
+            camera_translation=camera_translation, camera_quaternion=camera_quaternion,
+            line_start_point3d=line_start_point3d, line_end_point_3d=line_end_point_3d
+        )
+        return PnpPrediction(
+            kpt_2d=kpt_2d, pose=pose_pred, corner_2d=corner_2d_pred,
+            object_world_position=object_world_position, object_world_rotation=object_world_rotation,
+            p1=p1, p2=p2
+        )
+
+    def recalculate(
+        self, gt_kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray,
+        camera_translation: np.ndarray=None, camera_quaternion: np.ndarray=None,
+        line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None
+    ) -> PnpPrediction:
+        self = PnpPrediction.from_kpt_2d(
+            kpt_2d=self.kpt_2d,
+            gt_kpt_3d=gt_kpt_3d,
+            corner_3d=corner_3d,
+            K=K,
+            camera_translation=camera_translation,
+            camera_quaternion=camera_quaternion,
+            line_start_point3d=line_start_point3d,
+            line_end_point_3d=line_end_point_3d
         )
 
     def draw(
         self, img: np.ndarray,
-        color: tuple=(255,0,0), pt_radius: int=2, line_thickness: int=2
+        corners_line_color: tuple=(255,0,0),
+        corners_line_thickness: int=2,
+        corners_pt_radius: int=2,
+        direction_line_color: tuple=(255,0,0),
+        direction_line_thickness: int=5,
+        direction_point_color: tuple=(0,255,0)
     ) -> np.ndarray:
         result = draw_pts2d(
             img=img, pts2d=self.kpt_2d,
-            color=color, radius=pt_radius
+            color=corners_line_color, radius=corners_pt_radius
         )
         result = draw_corners(
             img=result, corner_2d=self.corner_2d,
-            color=color, thickness=line_thickness
+            color=corners_line_color, thickness=corners_line_thickness
         )
+        if self.p1 is not None and self.p2 is not None:
+            result = PnP_Model.draw_line(
+                img=result, p1=self.p1, p2=self.p2,
+                line_color=direction_line_color, point_color=direction_point_color,
+                thickness=direction_line_thickness
+            )
         return result
 
 class PnpPredictionList(
@@ -258,29 +407,41 @@ class PnpPredictionList(
 
     def draw(
         self, img: np.ndarray,
-        color: tuple=(255,0,0), pt_radius: int=2, line_thickness: int=2
+        corners_line_color: tuple=(0,0,255),
+        corners_line_thickness: int=2,
+        corners_pt_radius: int=2,
+        direction_line_color: tuple=(255,0,0),
+        direction_line_thickness: int=5,
+        direction_point_color: tuple=(0,255,0)
     ) -> np.ndarray:
         result = img.copy()
         for pred in self:
             result = pred.draw(
                 img=result,
-                color=color, pt_radius=pt_radius, line_thickness=line_thickness
+                corners_line_color=corners_line_color,
+                corners_pt_radius=corners_pt_radius,
+                corners_line_thickness=corners_line_thickness,
+                direction_line_color=direction_line_color,
+                direction_line_thickness=direction_line_thickness,
+                direction_point_color=direction_point_color
             )
         return result
 
 class PVNetFrameResult(BasicLoadableObject['PVNetFrameResult']):
-    def __init__(self, frame: str, pred_list: PnpPredictionList=None, test_name: str=None):
+    def __init__(self, frame: str, pred_list: PnpPredictionList=None, test_name: str=None, model_name: str=None):
         super().__init__()
         self.frame = frame
-        self.pred_list = pred_list if pred_list is not None else PVNetPredictionList()
+        self.pred_list = pred_list if pred_list is not None else PnpPredictionList()
         self.test_name = test_name
-    
+        self.model_name = model_name
+
     @classmethod
     def from_dict(cls, item_dict: dict) -> PVNetFrameResult:
         return PVNetFrameResult(
             frame=item_dict['frame'],
-            pred_list=PVNetPredictionList.from_dict_list(item_dict['pred_list']),
-            test_name=item_dict['test_name']
+            pred_list=PnpPredictionList.from_dict_list(item_dict['pred_list']),
+            test_name=item_dict['test_name'],
+            model_name=item_dict['model_name']
         )
 
 class PVNetFrameResultList(
@@ -298,6 +459,18 @@ class PVNetFrameResultList(
     def to_df(self) -> pd.DataFrame:
         return pd.DataFrame.from_records(self.to_dict_list())
     
+    # def get(
+    #     self, frame: str=None, test_name: str=None, model_name: str=None
+    # ) -> PVNetFrameResultList:
+    #     return PVNetFrameResultList(
+    #         [
+    #             result for result in self \
+    #                 if (frame is None or (frame is not None and result.frame == frame)) and \
+    #                     (test_name is None or (test_name is not None and result.test_name == test_name)) and \
+    #                     (model_name is None or (model_name is not None and result.model_name == model_name))
+    #         ]
+    #     )
+
 class PVNetInferer:
     def __init__(self, weight_path: str, vote_dim: int=18, seg_dim: int=2):
         self.network = get_res_pvnet(vote_dim, seg_dim).cuda()
@@ -416,7 +589,7 @@ class PVNetInferer:
         kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray,
         blackout: bool=False, dsize: (int, int)=None, show_pbar: bool=True,
         show_preview: bool=False, video_save_path: str=None, dump_dir: str=None,
-        accumulate_pred_dump: bool=True, pred_dump_path: str=None, test_name: str=None
+        accumulate_pred_dump: bool=True, pred_dump_path: str=None, test_name: str=None, model_name: str=None
     ) -> PVNetFrameResultList:
         stream_writer = StreamWriter(show_preview=show_preview, video_save_path=video_save_path, dump_dir=dump_dir)
         pbar = tqdm(total=len(dataset.images), unit='image(s)') if show_pbar else None
@@ -451,12 +624,9 @@ class PVNetInferer:
                 pred = self.predict(img=working_img, bbox=bbox if blackout else None)
                 pred_list.append(pred.to_pnp_pred(gt_kpt_3d=kpt_3d, corner_3d=corner_3d, K=K))
             if frame_result_list is not None:
-                frame_result = PVNetFrameResult(frame=file_name, pred_list=pred_list, test_name=test_name)
+                frame_result = PVNetFrameResult(frame=file_name, pred_list=pred_list, test_name=test_name, model_name=model_name)
                 frame_result_list.append(frame_result)
-            result = pred_list.draw(
-                img=orig_img,
-                color=(0,0,255), pt_radius=2, line_thickness=2
-            )
+            result = pred_list.draw(img=orig_img)
             stream_writer.step(img=result, file_name=file_name)
             if pbar is not None:
                 pbar.update()

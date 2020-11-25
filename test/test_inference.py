@@ -2,14 +2,16 @@ from clean_pvnet.infer.pvnet_inferer import PVNetInferer, PVNetFrameResultList
 from annotation_utils.linemod.objects import Linemod_Dataset, LinemodCamera
 from annotation_utils.coco.structs import COCO_Dataset
 from common_utils.path_utils import recursively_get_all_filepaths_of_extension, get_rootname_from_path, get_dirpath_from_filepath
-from common_utils.file_utils import dir_exists, file_exists
+from common_utils.file_utils import dir_exists, file_exists, make_dir_if_not_exists
 from tqdm import tqdm
 
 inferer = PVNetInferer(
     # weight_path='/home/clayton/workspace/git/clean-pvnet/data/model/pvnet/custom/99.pth',
     # weight_path='/home/clayton/workspace/prj/data_keep/data/misc_dataset/darwin_weights/194.pth',
-    weight_path='/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201119/59.pth'
+    weight_path='/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201119/499.pth'
 )
+model_name = '20201119_epoch499'
+
 # img_dir = '/home/clayton/workspace/git/pvnet-rendering/test/renders1'
 img_dir = '/home/clayton/workspace/prj/data_keep/data/misc_dataset/darwin_datasets/nihonbashi2/organized'
 linemod_dataset = Linemod_Dataset.load_from_path(f'{img_dir}/train.json')
@@ -22,6 +24,9 @@ linemod_image_sample = linemod_dataset.images[0]
 dsize = (linemod_image_sample.width, linemod_image_sample.height)
 
 robot_camera_dir = '/home/clayton/workspace/prj/data_keep/data/toyota/from_toyota/20201017/20201017_robot_camera'
+infer_data_dump = f'{robot_camera_dir}/infer_dump'
+make_dir_if_not_exists(infer_data_dump)
+
 csv_paths = recursively_get_all_filepaths_of_extension(robot_camera_dir, extension='csv')
 pbar = tqdm(total=len(csv_paths), unit='dataset(s)')
 pbar.set_description('Inferring Test Datasets')
@@ -44,13 +49,11 @@ for csv_path in csv_paths:
         blackout=True,
         dsize=dsize,
         show_preview=True,
-        # pred_dump_path=f'{img_dir}/infer.json',
-        test_name=test_name
+        test_name=test_name,
+        model_name=model_name,
+        pred_dump_path='pred_dump.json'
     )
-    for result in frame_result_list:
-        for pred in result.pred_list:
-            pred.mask = None
     frame_result_list += frame_result_list0
     pbar.update()
-frame_result_list.save_to_path(f'{robot_camera_dir}/infer.json', overwrite=True)
+frame_result_list.save_to_path(f'{infer_data_dump}/{model_name}_infer.json', overwrite=True)
 pbar.close()

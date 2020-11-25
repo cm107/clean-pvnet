@@ -34,7 +34,7 @@ setup(
         'opencv-python',
         'tqdm',
         'pycocotools',
-        'matplotlib==2.2.2',
+        'matplotlib',
         'plyfile==0.6',
         'scikit-image==0.14.2',
         'scikit-learn',
