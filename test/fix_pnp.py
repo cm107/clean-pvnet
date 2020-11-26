@@ -18,6 +18,10 @@ robot_camera_dir = '/home/clayton/workspace/prj/data_keep/data/toyota/from_toyot
 infer_data_dump = f'{robot_camera_dir}/infer_dump'
 
 K = np.array([517.799858, 0.000000, 303.876287, 0.000000, 514.807834, 238.157119, 0.000000, 0.000000, 1.000000]).reshape(3,3)
+# K = LinemodCamera(
+#     fx=700, fy=700,
+#     cx=350, cy=350
+# ).to_matrix()
 
 frame_result_list = PVNetFrameResultList.load_from_path(f'{infer_data_dump}/{model_name}_infer.json')
 pbar = tqdm(total=len(frame_result_list), unit='frame(s)')

@@ -12,7 +12,7 @@ from common_utils.path_utils import get_filename
 from common_utils.common_types.point import Point3D_List, Point2D_List, Point3D
 from common_utils.common_types.angle import QuaternionList
 from common_utils.common_types.bbox import BBox
-from common_utils.cv_drawing_utils import cv_simple_image_viewer
+from streamer.cv_viewer import cv_simple_image_viewer
 from common_utils.base.basic import BasicLoadableObject, BasicLoadableHandler, BasicHandler
 from annotation_utils.linemod.objects import Linemod_Dataset, LinemodCamera
 from annotation_utils.coco.structs import COCO_Dataset

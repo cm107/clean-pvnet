@@ -4,7 +4,7 @@ from typing import cast
 from streamer.recorder import Recorder
 from common_utils.file_utils import delete_all_files_in_dir, make_dir_if_not_exists
 from common_utils.path_utils import get_next_dump_path, get_valid_image_paths, get_extension_from_path
-from common_utils.cv_drawing_utils import SimpleVideoViewer
+from streamer.cv_viewer import SimpleVideoViewer
 
 class VideoWriter:
     def __init__(self, save_path: str, fps: int=5):
