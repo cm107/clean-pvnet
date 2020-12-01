@@ -1,5 +1,5 @@
 import torch
-import lib.csrc.ransac_voting.ransac_voting as ransac_voting
+import clean_pvnet.csrc.ransac_voting.ransac_voting as ransac_voting
 import numpy as np
 
 
