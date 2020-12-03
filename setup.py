@@ -36,7 +36,6 @@ setup(
         'pycocotools',
         'matplotlib',
         'plyfile==0.6',
-        'scikit-image==0.14.2',
         'PyOpenGL==3.1.1a1',
         'ipdb==0.11',
         'cyglfw3==3.1.0.2',
