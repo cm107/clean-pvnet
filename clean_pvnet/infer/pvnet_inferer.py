@@ -1,4 +1,3 @@
-from __future__ import annotations
 import numpy as np
 import torch
 import cv2
@@ -161,7 +160,7 @@ class PVNetPrediction(BasicLoadableObject['PVNetPrediction']):
         }
     
     @classmethod
-    def from_dict(cls, item_dict: dict) -> PVNetPrediction:
+    def from_dict(cls, item_dict: dict):
         return PVNetPrediction(
             seg=np.array(item_dict['seg']),
             vertex=np.array(item_dict['vertex']),
@@ -196,7 +195,7 @@ class PVNetPrediction(BasicLoadableObject['PVNetPrediction']):
         distortion: np.ndarray=None,
         line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None,
         units_per_meter: float=1.0
-    ) -> PnpPrediction:
+    ):
         pose_pred = self.to_pose_pred(gt_kpt_3d=gt_kpt_3d, K=K)
         corner_2d_pred = self.to_corner_2d_pred(
             gt_corner_3d=corner_3d, K=K, pose_pred=pose_pred
@@ -255,7 +254,7 @@ class PVNetPredictionList(
         self.pred_list = self.obj_list
     
     @classmethod
-    def from_dict_list(cls, dict_list: List[dict]) -> PVNetPredictionList:
+    def from_dict_list(cls, dict_list: List[dict]):
         return PVNetPredictionList([PVNetPrediction.from_dict(item_dict) for item_dict in dict_list])
 
     def to_df(self) -> pd.DataFrame:
@@ -267,7 +266,7 @@ class PVNetPredictionList(
         distortion: np.ndarray=None,
         line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None,
         units_per_meter: float=1.0
-    ) -> PnpPredictionList:
+    ):
         pnp_pred_list = PnpPredictionList()
         for pred in self:
             pnp_pred_list.append(
@@ -334,7 +333,7 @@ class PnpPrediction(BasicLoadableObject['PnpPrediction']):
         }
     
     @classmethod
-    def from_dict(cls, item_dict: dict) -> PnpPrediction:
+    def from_dict(cls, item_dict: dict):
         return PnpPrediction(
             kpt_2d=np.array(item_dict['kpt_2d']),
             pose=np.array(item_dict['pose']),
@@ -364,7 +363,7 @@ class PnpPrediction(BasicLoadableObject['PnpPrediction']):
         distortion: np.ndarray=None,
         line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None,
         units_per_meter: float=1.0
-    ) -> PnpPrediction:
+    ):
         pose_pred = calc_pose_pred(
             kpt_2d=kpt_2d, gt_kpt_3d=gt_kpt_3d, K=K
         )
@@ -391,7 +390,7 @@ class PnpPrediction(BasicLoadableObject['PnpPrediction']):
         distortion: np.ndarray=None,
         line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None,
         units_per_meter: float=1.0
-    ) -> PnpPrediction:
+    ):
         new = PnpPrediction.from_kpt_2d(
             kpt_2d=self.kpt_2d,
             gt_kpt_3d=gt_kpt_3d,
@@ -445,7 +444,7 @@ class PnpPredictionList(
         self.pred_list = self.obj_list
     
     @classmethod
-    def from_dict_list(cls, dict_list: List[dict]) -> PnpPredictionList:
+    def from_dict_list(cls, dict_list: List[dict]):
         return PnpPredictionList([PnpPrediction.from_dict(item_dict) for item_dict in dict_list])
 
     def draw(
@@ -479,7 +478,7 @@ class PVNetFrameResult(BasicLoadableObject['PVNetFrameResult']):
         self.model_name = model_name
 
     @classmethod
-    def from_dict(cls, item_dict: dict) -> PVNetFrameResult:
+    def from_dict(cls, item_dict: dict):
         return PVNetFrameResult(
             frame=item_dict['frame'],
             pred_list=PnpPredictionList.from_dict_list(item_dict['pred_list']),
@@ -496,7 +495,7 @@ class PVNetFrameResultList(
         self.result_list = self.obj_list
     
     @classmethod
-    def from_dict_list(cls, dict_list: List[dict]) -> PVNetFrameResultList:
+    def from_dict_list(cls, dict_list: List[dict]):
         return PVNetFrameResultList([PVNetFrameResult.from_dict(item_dict) for item_dict in dict_list])
 
     def to_df(self) -> pd.DataFrame:
@@ -514,7 +513,7 @@ class PVNetInferer:
         self.network.eval()
         self.transforms = make_transforms(is_train=False)
     
-    def _predict(self, img: np.ndarray, bbox: BBox=None) -> Dict[str, torch.cuda.Tensor]:
+    def _predict(self, img: np.ndarray, bbox: BBox=None) -> Dict[str, torch.cuda.FloatTensor]:
         # Convert to JpegImageFile
         if isinstance(img, JpegImageFile):
             img0 = img.copy()

@@ -41,9 +41,7 @@ setup(
         'PyOpenGL==3.1.1a1',
         'ipdb==0.11',
         'cyglfw3==3.1.0.2',
-        'pyassimp==3.3',
         'progressbar==2.5',
-        'open3d-python==0.5.0.0',
         'tensorboardX==1.2',
         'cffi==1.11.5',
         'transforms3d',
@@ -51,10 +49,10 @@ setup(
         'tensorboard',
         'pandas',
         'pylint==2.4.4',
-        'pyclay-common_utils==0.2.4',
-        'pyclay-annotation_utils==0.3.7'
+        'pyclay-common_utils @ https://github.com/cm107/common_utils/archive/0.2.4+py36.zip',
+        'pyclay-annotation_utils @ https://github.com/cm107/annotation_utils/archive/0.3.7+py36.zip'
     ],
-    python_requires='>=3.7'
+    python_requires='==3.6.*'
 )
 
 # Build csrc
