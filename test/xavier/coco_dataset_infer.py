@@ -27,5 +27,6 @@ inferer.infer_coco_dataset(
     K=K,
     blackout=True,
     dsize=dsize,
+    accumulate_pred_dump=False,
     video_save_path='test.avi', show_preview=True
 )
