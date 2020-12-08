@@ -25,7 +25,7 @@ from ..datasets.transforms import make_transforms
 from ..util import pvnet_pose_utils
 from ..util.draw_utils import draw_corners, draw_pts2d
 from ..util.error_utils import get_type_error_message
-from ..util.stream_writer import StreamWriter
+from streamer.recorder.stream_writer import StreamWriter
 
 def do_pnp(
     kpt_2d: np.ndarray, gt_kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray,
