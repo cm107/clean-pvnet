@@ -1,21 +1,26 @@
 from __future__ import annotations
+import warnings
 import numpy as np
 import torch
 import cv2
 import pandas as pd
 from tqdm import tqdm
-from typing import List, Dict
+from typing import List, Dict, cast
 from PIL.JpegImagePlugin import JpegImageFile
 from PIL import Image
 
+from common_utils.file_utils import delete_all_files_in_dir, \
+    make_dir_if_not_exists, dir_exists
 from common_utils.path_utils import get_filename
 from common_utils.common_types.point import Point3D_List, Point2D_List, Point3D
 from common_utils.common_types.angle import QuaternionList
 from common_utils.common_types.bbox import BBox
-from streamer.cv_viewer import cv_simple_image_viewer
 from common_utils.base.basic import BasicLoadableObject, BasicLoadableHandler, BasicHandler
 from annotation_utils.linemod.objects import Linemod_Dataset, LinemodCamera
 from annotation_utils.coco.structs import COCO_Dataset
+from annotation_utils.coco.wrappers import infer_tests_wrapper
+from streamer.cv_viewer import cv_simple_image_viewer
+from streamer.recorder.stream_writer import StreamWriter
 
 from model_based_angle.pnp import PnP_Model
 
@@ -25,7 +30,8 @@ from ..datasets.transforms import make_transforms
 from ..util import pvnet_pose_utils
 from ..util.draw_utils import draw_corners, draw_pts2d
 from ..util.error_utils import get_type_error_message
-from ..util.stream_writer import StreamWriter
+
+warnings.filterwarnings("ignore", category=UserWarning)
 
 def do_pnp(
     kpt_2d: np.ndarray, gt_kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray,
@@ -299,6 +305,23 @@ class PVNetPredictionList(
             )
         return result
 
+class PnpDrawSettings(BasicLoadableObject['PnpDrawSettings']):
+    def __init__(
+        self,
+        corners_line_color: tuple=(0,0,255),
+        corners_line_thickness: int=2,
+        corners_pt_radius: int=2,
+        direction_line_color: tuple=(255,0,0),
+        direction_line_thickness: int=5,
+        direction_point_color: tuple=(0,255,0)
+    ):
+        self.corners_line_color = corners_line_color
+        self.corners_line_thickness = corners_line_thickness
+        self.corners_pt_radius = corners_pt_radius
+        self.direction_line_color = direction_line_color
+        self.direction_line_thickness = direction_line_thickness
+        self.direction_point_color = direction_point_color
+
 class PnpPrediction(BasicLoadableObject['PnpPrediction']):
     def __init__(
         self, kpt_2d: np.ndarray, pose: np.ndarray, corner_2d: np.ndarray,
@@ -316,11 +339,11 @@ class PnpPrediction(BasicLoadableObject['PnpPrediction']):
     
     @property
     def position(self) -> Point3D:
-        return Point3D.from_list(self.object_world_position.tolist())
+        return Point3D.from_list(self.object_world_position.tolist()) if self.object_world_position is not None else None
     
     @property
     def distance_from_camera(self) -> float:
-        return self.position.distance(Point3D.origin())
+        return self.position.distance(Point3D.origin()) if self.position is not None else None
 
     def to_dict(self) -> dict:
         return {
@@ -411,28 +434,24 @@ class PnpPrediction(BasicLoadableObject['PnpPrediction']):
         self.p1 = new.p1
         self.p2 = new.p2
 
-    def draw(
-        self, img: np.ndarray,
-        corners_line_color: tuple=(255,0,0),
-        corners_line_thickness: int=2,
-        corners_pt_radius: int=2,
-        direction_line_color: tuple=(255,0,0),
-        direction_line_thickness: int=5,
-        direction_point_color: tuple=(0,255,0)
-    ) -> np.ndarray:
+    def draw(self, img: np.ndarray, settings: PnpDrawSettings=None) -> np.ndarray:
+        settings0 = settings if settings is not None else PnpDrawSettings()
         result = draw_pts2d(
             img=img, pts2d=self.kpt_2d,
-            color=corners_line_color, radius=corners_pt_radius
+            color=settings0.corners_line_color,
+            radius=settings0.corners_pt_radius
         )
         result = draw_corners(
             img=result, corner_2d=self.corner_2d,
-            color=corners_line_color, thickness=corners_line_thickness
+            color=settings0.corners_line_color,
+            thickness=settings0.corners_line_thickness
         )
         if self.p1 is not None and self.p2 is not None:
             result = PnP_Model.draw_line(
                 img=result, p1=self.p1, p2=self.p2,
-                line_color=direction_line_color, point_color=direction_point_color,
-                thickness=direction_line_thickness
+                line_color=settings0.direction_line_color,
+                point_color=settings0.direction_point_color,
+                thickness=settings0.direction_line_thickness
             )
         return result
 
@@ -448,26 +467,10 @@ class PnpPredictionList(
     def from_dict_list(cls, dict_list: List[dict]) -> PnpPredictionList:
         return PnpPredictionList([PnpPrediction.from_dict(item_dict) for item_dict in dict_list])
 
-    def draw(
-        self, img: np.ndarray,
-        corners_line_color: tuple=(0,0,255),
-        corners_line_thickness: int=2,
-        corners_pt_radius: int=2,
-        direction_line_color: tuple=(255,0,0),
-        direction_line_thickness: int=5,
-        direction_point_color: tuple=(0,255,0)
-    ) -> np.ndarray:
+    def draw(self, img: np.ndarray, settings: PnpDrawSettings=None) -> np.ndarray:
         result = img.copy()
         for pred in self:
-            result = pred.draw(
-                img=result,
-                corners_line_color=corners_line_color,
-                corners_pt_radius=corners_pt_radius,
-                corners_line_thickness=corners_line_thickness,
-                direction_line_color=direction_line_color,
-                direction_line_thickness=direction_line_thickness,
-                direction_point_color=direction_point_color
-            )
+            result = pred.draw(img=result, settings=settings)
         return result
 
 class PVNetFrameResult(BasicLoadableObject['PVNetFrameResult']):
@@ -487,6 +490,9 @@ class PVNetFrameResult(BasicLoadableObject['PVNetFrameResult']):
             model_name=item_dict['model_name']
         )
 
+    def draw(self, img: np.ndarray, settings: PnpDrawSettings=None) -> np.ndarray:
+        return self.pred_list.draw(img=img, settings=settings)
+
 class PVNetFrameResultList(
     BasicLoadableHandler['PVNetFrameResultList', 'PVNetFrameResult'],
     BasicHandler['PVNetFrameResultList', 'PVNetFrameResult']
@@ -495,6 +501,14 @@ class PVNetFrameResultList(
         super().__init__(obj_type=PVNetFrameResult, obj_list=result_list)
         self.result_list = self.obj_list
     
+    @property
+    def model_names(self) -> List[str]:
+        return list(set([datum.model_name for datum in self]))
+
+    @property
+    def test_names(self) -> List[str]:
+        return list(set([datum.test_name for datum in self]))
+
     @classmethod
     def from_dict_list(cls, dict_list: List[dict]) -> PVNetFrameResultList:
         return PVNetFrameResultList([PVNetFrameResult.from_dict(item_dict) for item_dict in dict_list])
@@ -622,12 +636,12 @@ class PVNetInferer:
         distortion: np.ndarray=None,
         line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None,
         units_per_meter: float=1.0,
-        blackout: bool=False, dsize: (int, int)=None, show_pbar: bool=True,
-        show_preview: bool=False, video_save_path: str=None, dump_dir: str=None,
-        accumulate_pred_dump: bool=True, pred_dump_path: str=None, test_name: str=None, model_name: str=None
+        blackout: bool=False, dsize: (int, int)=None, show_pbar: bool=True, leave_pbar: bool=False,
+        preserve_dump_img_filename: bool=True,
+        accumulate_pred_dump: bool=True, pred_dump_path: str=None, test_name: str=None, model_name: str=None,
+        stream_writer: StreamWriter=None, leave_stream_writer_open: bool=False
     ) -> PVNetFrameResultList:
-        stream_writer = StreamWriter(show_preview=show_preview, video_save_path=video_save_path, dump_dir=dump_dir)
-        pbar = tqdm(total=len(dataset.images), unit='image(s)') if show_pbar else None
+        pbar = tqdm(total=len(dataset.images), unit='image(s)', leave=leave_pbar) if show_pbar else None
         frame_result_list = PVNetFrameResultList() if pred_dump_path is not None or accumulate_pred_dump else None
         for coco_image in dataset.images:
             file_name = get_filename(coco_image.file_name)
@@ -672,11 +686,95 @@ class PVNetInferer:
                 frame_result = PVNetFrameResult(frame=file_name, pred_list=pred_list, test_name=test_name, model_name=model_name)
                 frame_result_list.append(frame_result)
             result = pred_list.draw(img=orig_img)
-            stream_writer.step(img=result, file_name=file_name)
+            if stream_writer is not None:
+                stream_writer.step(img=result, file_name=file_name if preserve_dump_img_filename else None)
             if pbar is not None:
                 pbar.update()
-        stream_writer.close()
+        if stream_writer is not None and not leave_stream_writer_open:
+            stream_writer.close()
         if pred_dump_path is not None:
             frame_result_list.save_to_path(pred_dump_path, overwrite=True)
         pbar.close()
         return frame_result_list
+
+def pvnet_infer(
+    kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray, # Required
+    weight_path: str, model_name: str, dataset: COCO_Dataset, test_name: str, # Required for wrapper
+    vote_dim: int=18, seg_dim: int=2, # Optional
+    camera_translation: np.ndarray=None, camera_quaternion: np.ndarray=None,
+    distortion: np.ndarray=None,
+    line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None,
+    units_per_meter: float=1.0,
+    blackout: bool=False, dsize: (int, int)=None, show_pbar: bool=True,
+    accumulate_pred_dump: bool=True,
+    stream_writer: StreamWriter=None, leave_stream_writer_open: bool=False
+) -> PVNetFrameResultList:
+    inferer = PVNetInferer(
+        weight_path=weight_path,
+        vote_dim=vote_dim,
+        seg_dim=seg_dim
+    )
+    pred_data = inferer.infer_coco_dataset(
+        dataset=dataset,
+        kpt_3d=kpt_3d,
+        corner_3d=corner_3d,
+        K=K,
+        accumulate_pred_dump=accumulate_pred_dump,
+        pred_dump_path=None,
+        preserve_dump_img_filename=True,
+        camera_translation=camera_translation,
+        camera_quaternion=camera_quaternion,
+        distortion=distortion,
+        line_start_point3d=line_start_point3d,
+        line_end_point_3d=line_end_point_3d,
+        units_per_meter=units_per_meter,
+        blackout=blackout,
+        dsize=dsize,
+        show_pbar=show_pbar,
+        leave_pbar=False,
+        stream_writer=stream_writer,
+        leave_stream_writer_open=leave_stream_writer_open,
+        model_name=model_name,
+        test_name=test_name
+    )
+    del inferer
+    return pred_data
+
+def infer_tests_pvnet(
+    weight_path: str, model_name: str,
+    dataset: COCO_Dataset, test_name: str,
+    kpt_3d: np.ndarray, corner_3d: np.ndarray, K: np.ndarray,
+    show_pbar: bool=True,
+    vote_dim: int=18, seg_dim: int=2,
+    camera_translation: np.ndarray=None, camera_quaternion: np.ndarray=None,
+    distortion: np.ndarray=None,
+    line_start_point3d: np.ndarray=None, line_end_point_3d: np.ndarray=None,
+    units_per_meter: float=1.0,
+    blackout: bool=False, dsize: (int, int)=None,
+    show_preview: bool=False,
+    data_dump_dir: str=None,
+    video_dump_dir: str=None,
+    img_dump_dir: str=None
+):
+    infer_tests_wrapper(
+        weight_path=weight_path, model_name=model_name,
+        dataset=dataset, test_name=test_name,
+        handler_constructor=PVNetFrameResultList,
+        data_dump_dir=data_dump_dir, video_dump_dir=video_dump_dir,
+        img_dump_dir=img_dump_dir, show_preview=show_preview,
+        show_pbar=show_pbar
+    )(pvnet_infer)(
+        kpt_3d=kpt_3d,
+        corner_3d=corner_3d,
+        K=K,
+        vote_dim=vote_dim,
+        camera_translation=camera_translation,
+        camera_quaternion=camera_quaternion,
+        distortion=distortion,
+        line_start_point3d=line_start_point3d,
+        line_end_point_3d=line_end_point_3d,
+        units_per_meter=units_per_meter,
+        blackout=blackout,
+        dsize=dsize,
+        show_pbar=show_pbar
+    )
