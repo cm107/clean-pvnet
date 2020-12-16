@@ -481,6 +481,14 @@ class PVNetFrameResult(BasicLoadableObject['PVNetFrameResult']):
         self.test_name = test_name
         self.model_name = model_name
 
+    def to_dict(self) -> dict:
+        return {
+            'frame': self.frame,
+            'pred_list': self.pred_list.to_dict_list(),
+            'test_name': self.test_name,
+            'model_name': self.model_name
+        }
+
     @classmethod
     def from_dict(cls, item_dict: dict) -> PVNetFrameResult:
         return PVNetFrameResult(
@@ -694,7 +702,8 @@ class PVNetInferer:
             stream_writer.close()
         if pred_dump_path is not None:
             frame_result_list.save_to_path(pred_dump_path, overwrite=True)
-        pbar.close()
+        if pbar is not None:
+            pbar.close()
         return frame_result_list
 
 def pvnet_infer(
@@ -754,15 +763,17 @@ def infer_tests_pvnet(
     show_preview: bool=False,
     data_dump_dir: str=None,
     video_dump_dir: str=None,
-    img_dump_dir: str=None
+    img_dump_dir: str=None,
+    skip_if_data_dump_exists: bool=False
 ):
     infer_tests_wrapper(
         weight_path=weight_path, model_name=model_name,
         dataset=dataset, test_name=test_name,
         handler_constructor=PVNetFrameResultList,
         data_dump_dir=data_dump_dir, video_dump_dir=video_dump_dir,
-        img_dump_dir=img_dump_dir, show_preview=show_preview,
-        show_pbar=show_pbar
+        img_dump_dir=img_dump_dir,
+        skip_if_data_dump_exists=skip_if_data_dump_exists,
+        show_preview=show_preview, show_pbar=show_pbar,
     )(pvnet_infer)(
         kpt_3d=kpt_3d,
         corner_3d=corner_3d,

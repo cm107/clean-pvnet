@@ -6,14 +6,36 @@ from annotation_utils.linemod.objects import Linemod_Dataset
 from clean_pvnet.infer.pvnet_inferer import infer_tests_pvnet
 
 weight_paths = [
-    '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201209/199.pth',
-    # '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201209/49.pth',
-    # '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201209/19.pth'
+    # '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201119/99.pth',
+    # '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201119/199.pth',
+    # '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201119/299.pth',
+    # '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201119/399.pth',
+    # '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201119/499.pth',
+    # '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201119/599.pth',
+    # '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201119/699.pth',
+    # '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201119/799.pth',
+    # '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201119/899.pth',
+    # '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201119/999.pth',
+    # '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201209/99.pth',
+    '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201209/149.pth',
+    # '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201209/199.pth',
+    '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201209/249.pth',
 ]
 model_names = [
-    'pvnet20201209-epoch199',
-    # 'pvnet20201209-epoch49',
-    # 'pvnet20201209-epoch19'
+    # 'pvnet20201119-epoch99',
+    # 'pvnet20201119-epoch199',
+    # 'pvnet20201119-epoch299',
+    # 'pvnet20201119-epoch399',
+    # 'pvnet20201119-epoch499',
+    # 'pvnet20201119-epoch599',
+    # 'pvnet20201119-epoch699',
+    # 'pvnet20201119-epoch799',
+    # 'pvnet20201119-epoch899',
+    # 'pvnet20201119-epoch999',
+    # 'pvnet20201209-epoch99',
+    'pvnet20201209-epoch149',
+    # 'pvnet20201209-epoch199',
+    'pvnet20201209-epoch249',
 ]
 test_root_dir = '/home/clayton/workspace/prj/data_keep/data/toyota/from_toyota/20201017/20201017_robot_camera'
 csv_paths = recursively_get_all_filepaths_of_extension(test_root_dir, extension='csv')
@@ -49,8 +71,9 @@ infer_tests_pvnet(
     dsize=dsize,
     show_pbar=True,
     blackout=True,
-    show_preview=True,
+    show_preview=False,
     data_dump_dir='infer_data_dump',
-    video_dump_dir='video_dump',
-    img_dump_dir='img_dump'
+    # video_dump_dir='video_dump',
+    # img_dump_dir='img_dump',
+    skip_if_data_dump_exists=True
 )
