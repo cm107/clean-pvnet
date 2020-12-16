@@ -526,6 +526,21 @@ class PVNetFrameResultList(
     
 class PVNetInferer:
     def __init__(self, weight_path: str, vote_dim: int=18, seg_dim: int=2):
+        """Inferer for the PVNet model.
+        This model can only detect one object at a time.
+        In order to detect multiple objects, use the model together with a bbox model.
+
+        Args:
+            weight_path (str): Path to trained weights.
+            vote_dim (int, optional):
+                vote_dim parameter defined in network model.
+                Only change this if you know what you are doing.
+                Defaults to 18.
+            seg_dim (int, optional):
+                seg_dim parameter defined in network model.
+                Only change this if you know what you are doing.
+                Defaults to 2.
+        """
         self.network = get_res_pvnet(vote_dim, seg_dim).cuda()
         custom_load_network(
             net=self.network,
@@ -574,6 +589,22 @@ class PVNetInferer:
         return self.network(img0)
     
     def predict(self, img: np.ndarray, bbox: BBox=None) -> PVNetPrediction:
+        """Gets prediction data from an input image.
+
+        Args:
+            img (np.ndarray): Input image
+            bbox (BBox, optional):
+                Specify a bbox object if you would like to color all regions of the image
+                outside of the bbox black.
+                This approach can be used for detecting multiple objects in the same image
+                given a list of bounding boxes.
+                If this is not used, the prediction will be negatively affected when there
+                are multiple target objects in the image.
+                No modifications are made to the image when None.
+
+        Returns:
+            PVNetPrediction: Prediction data corresponding to pvnet results.
+        """
         output = self._predict(img=img, bbox=bbox)
         return PVNetPrediction(
             seg=output['seg'].detach().cpu().numpy()[0],
