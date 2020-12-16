@@ -48,7 +48,7 @@ setup(
         'pandas',
         'pylint==2.4.4',
         'pyclay-common_utils==0.2.4',
-        'pyclay-annotation_utils==0.3.7'
+        'pyclay-annotation_utils @ https://github.com/cm107/annotation_utils/archive/0.3.7post0.zip'
     ],
     python_requires='>=3.7'
 )
