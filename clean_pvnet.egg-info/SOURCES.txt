@@ -21,5 +21,4 @@ clean_pvnet/util/error_utils.py
 clean_pvnet/util/net_utils.py
 clean_pvnet/util/pvnet_data_utils.py
 clean_pvnet/util/pvnet_pose_utils.py
-clean_pvnet/util/stream_writer.py
 test/test_inference.py
