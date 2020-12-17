@@ -47,7 +47,7 @@ setup(
         'tensorboard',
         'pandas',
         'pylint==2.4.4',
-        'pyclay-annotation_utils @ https://github.com/cm107/annotation_utils/archive/development.zip'
+        'pyclay-annotation_utils>=0.3.8'
     ],
     python_requires='>=3.7'
 )
