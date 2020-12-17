@@ -315,6 +315,32 @@ class PnpDrawSettings(BasicLoadableObject['PnpDrawSettings']):
         direction_line_thickness: int=5,
         direction_point_color: tuple=(0,255,0)
     ):
+        """Drawing settings for Pnp result calculated from pvnet output.
+
+        Args:
+            corners_line_color (tuple, optional):
+                The color of the lines that connect corner_3d.
+                (This refers to the 3D box.)
+                Defaults to (0,0,255).
+            corners_line_thickness (int, optional):
+                The thickness of the lines that connect corner_3d.
+                (This refers to the 3D box.)
+                Defaults to 2.
+            corners_pt_radius (int, optional):
+                The radius of the keypoints that were inputted into the Pnp model.
+                (These are the points that were directly outputted from the pvnet model.)
+                Defaults to 2.
+            direction_line_color (tuple, optional):
+                The color of the line indicating which way the object is facing.
+                Defaults to (255,0,0).
+            direction_line_thickness (int, optional):
+                The thickness of the line indicating which way the object is facing.
+                Defaults to 5.
+            direction_point_color (tuple, optional):
+                The color of the point at the end of the line indicating which way the
+                object is facing.
+                Defaults to (0,255,0).
+        """
         self.corners_line_color = corners_line_color
         self.corners_line_thickness = corners_line_thickness
         self.corners_pt_radius = corners_pt_radius
@@ -328,6 +354,31 @@ class PnpPrediction(BasicLoadableObject['PnpPrediction']):
         object_world_position: np.ndarray, object_world_rotation: np.ndarray,
         p1: tuple, p2: tuple
     ):
+        """This class represents the data of a single Pnp calculation, which
+        in turn corresponds to a single pvnet inference.
+
+        Args:
+            kpt_2d (np.ndarray):
+                The 2D keypoints that were directly outputted from the pvnet model.
+                These keypoints, together with other known values (i.e. camera matrix, etc.),
+                are used to calculate the rest of the values shown below.
+            pose (np.ndarray):
+                Array that represents the pose of the object.
+            corner_2d (np.ndarray):
+                These points are a projection of corner_3d, the corners of the 3D bounding box,
+                to the camera plane. These values are used draw a visualization of the
+                3D bounding box.
+            object_world_position (np.ndarray):
+                3D position of the detected object in 3D space relative to the camera.
+            object_world_rotation (np.ndarray):
+                3D rotation of the detected object in 3D space relative to the camera.
+            p1 (tuple):
+                Starting point of directional line. This is used for drawing a visualization of
+                the directional line.
+            p2 (tuple):
+                Ending point of directional line. This is used for drawing a visualization of
+                the directional line.
+        """
         super().__init__()
         self.kpt_2d = kpt_2d
         self.pose = pose
@@ -460,6 +511,14 @@ class PnpPredictionList(
     BasicHandler['PnpPredictionList', 'PnpPrediction']
 ):
     def __init__(self, pred_list: List[PnpPrediction]=None):
+        """List of PnpPrediction data. There are some useful methods implemented in
+        this class for working with PnpPrediction data.
+
+        Args:
+            pred_list (List[PnpPrediction], optional):
+                List of PnpPrediction objects.
+                Empty list when None.
+        """
         super().__init__(obj_type=PnpPrediction, obj_list=pred_list)
         self.pred_list = self.obj_list
     
@@ -474,7 +533,33 @@ class PnpPredictionList(
         return result
 
 class PVNetFrameResult(BasicLoadableObject['PVNetFrameResult']):
-    def __init__(self, frame: str, pred_list: PnpPredictionList=None, test_name: str=None, model_name: str=None):
+    def __init__(
+        self, frame: str, pred_list: PnpPredictionList=None,
+        test_name: str=None, model_name: str=None
+    ):
+        """A collection of all pnp data and metadata in a single frame.
+
+        Args:
+            frame (str):
+                The name of the frame. Usually an image filename.
+                When working with images loaded from a video, the frame number can be used instead.
+                When working with a live stream of images, such as a webcamera stream, a timestamp
+                can be used here instead. This value is meant strictly for identification purposes.
+            pred_list (PnpPredictionList, optional):
+                PnpPredictionList object.
+                Empty PnpPredictionList when None.
+            test_name (str, optional):
+                The name of the test data used to generate this prediction data.
+                This can be the name of an image set the name of a video file, or some kind of description
+                of what makes the test data unique.
+                Defaults to None.
+            model_name (str, optional):
+                The name of the trained model that was used when inferring the test data to get this
+                prediction data. This is usually a string that contains the name of the network,
+                important hyperparameters used during training, and/or a timestamp indicating when the
+                model was trained.
+                Defaults to None.
+        """
         super().__init__()
         self.frame = frame
         self.pred_list = pred_list if pred_list is not None else PnpPredictionList()
@@ -499,6 +584,17 @@ class PVNetFrameResult(BasicLoadableObject['PVNetFrameResult']):
         )
 
     def draw(self, img: np.ndarray, settings: PnpDrawSettings=None) -> np.ndarray:
+        """Draws all pvnet prediction data for a given frame onto an image.
+
+        Args:
+            img (np.ndarray): Input image.
+            settings (PnpDrawSettings, optional):
+                Pnp drawing settings.
+                Defaults settings are used when None.
+
+        Returns:
+            np.ndarray: [description]
+        """
         return self.pred_list.draw(img=img, settings=settings)
 
 class PVNetFrameResultList(
@@ -506,6 +602,13 @@ class PVNetFrameResultList(
     BasicHandler['PVNetFrameResultList', 'PVNetFrameResult']
 ):
     def __init__(self, result_list: List[PVNetFrameResult]=None):
+        """All prediction and metadata for all frames.
+
+        Args:
+            result_list (List[PVNetFrameResult], optional):
+                List of PVNetFrameResult objects.
+                Empty list when None.
+        """
         super().__init__(obj_type=PVNetFrameResult, obj_list=result_list)
         self.result_list = self.obj_list
     
