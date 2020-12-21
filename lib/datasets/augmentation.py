@@ -138,9 +138,17 @@ def crop_or_padding_to_fixed_size_instance(img, mask, hcoords, th, tw, overlap_r
     wrmax = int(min(wmin + overlap_ratio * fw, w - tw))  # w must > target_width else wrmax<0
     wrmin = int(max(wmin + overlap_ratio * fw - tw, 0))
 
-    hbeg = 0 if hpad else np.random.randint(hrmin, hrmax)
+    try:
+        hbeg = 0 if hpad else np.random.randint(hrmin, hrmax)
+    except:
+        print(f"(hrmin, hrmax): {(hrmin, hrmax)} -> Couldn't calculate hbeg with randint. Fallback to 0.")
+        hbeg = 0
     hend = hbeg + th
-    wbeg = 0 if wpad else np.random.randint(wrmin, wrmax)  # if pad then [0,wend] will larger than [0,w], indexing it is safe
+    try:
+        wbeg = 0 if wpad else np.random.randint(wrmin, wrmax)  # if pad then [0,wend] will larger than [0,w], indexing it is safe
+    except:
+        print(f"(wrmin, wrmax): {(wrmin, wrmax)} -> Couldn't calculate wbeg with randint. Fallback to 0.")
+        wbeg = 0
     wend = wbeg + tw
 
     img = img[hbeg:hend, wbeg:wend]
