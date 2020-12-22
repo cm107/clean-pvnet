@@ -599,7 +599,7 @@ class PnpPrediction(BasicLoadableObject["PnpPrediction"]):
         line_start_point3d: np.ndarray = None,
         line_end_point_3d: np.ndarray = None,
         units_per_meter: float = 1.0,
-    ) -> PnpPrediction:
+    ):
         new = PnpPrediction.from_kpt_2d(
             kpt_2d=self.kpt_2d,
             gt_kpt_3d=gt_kpt_3d,

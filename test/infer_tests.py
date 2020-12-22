@@ -1,3 +1,4 @@
+import numpy as np
 from common_utils.file_utils import file_exists, dir_exists
 from common_utils.path_utils import recursively_get_all_filepaths_of_extension, \
     get_rootname_from_path, get_dirpath_from_filepath
@@ -17,9 +18,13 @@ weight_paths = [
     # '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201119/899.pth',
     # '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201119/999.pth',
     # '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201209/99.pth',
-    '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201209/149.pth',
+    # '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201209/149.pth',
     # '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201209/199.pth',
-    '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201209/249.pth',
+    # '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201209/249.pth',
+    '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201209/299.pth',
+    '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201209/399.pth',
+    '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201209/499.pth',
+    '/home/clayton/workspace/prj/data_keep/data/weights/pvnet_hsr/20201209/599.pth',
 ]
 model_names = [
     # 'pvnet20201119-epoch99',
@@ -33,9 +38,13 @@ model_names = [
     # 'pvnet20201119-epoch899',
     # 'pvnet20201119-epoch999',
     # 'pvnet20201209-epoch99',
-    'pvnet20201209-epoch149',
+    # 'pvnet20201209-epoch149',
     # 'pvnet20201209-epoch199',
-    'pvnet20201209-epoch249',
+    # 'pvnet20201209-epoch249',
+    'pvnet20201209-epoch299',
+    'pvnet20201209-epoch399',
+    'pvnet20201209-epoch499',
+    'pvnet20201209-epoch599',
 ]
 test_root_dir = '/home/clayton/workspace/prj/data_keep/data/toyota/from_toyota/20201017/20201017_robot_camera'
 csv_paths = recursively_get_all_filepaths_of_extension(test_root_dir, extension='csv')
@@ -56,7 +65,9 @@ linemod_ann_sample = linemod_dataset.annotations[0]
 kpt_3d = linemod_ann_sample.fps_3d.copy()
 kpt_3d.append(linemod_ann_sample.center_3d)
 corner_3d = linemod_ann_sample.corner_3d
-K = linemod_ann_sample.K
+# K = linemod_ann_sample.K
+K = np.array([517.799858, 0.000000, 303.876287, 0.000000, 514.807834, 238.157119, 0.000000, 0.000000, 1.000000]).reshape(3,3)
+distortion = np.array([0.001647, -0.105636, -0.002094, -0.006446, 0.000000])
 linemod_image_sample = linemod_dataset.images[0]
 dsize = (linemod_image_sample.width, linemod_image_sample.height)
 
@@ -68,6 +79,7 @@ infer_tests_pvnet(
     kpt_3d=kpt_3d,
     corner_3d=corner_3d,
     K=K,
+    distortion=distortion,
     dsize=dsize,
     show_pbar=True,
     blackout=True,
