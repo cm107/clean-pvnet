@@ -771,11 +771,21 @@ class PVNetFrameResultList(
 
     @property
     def model_names(self) -> List[str]:
-        return list(set([datum.model_name for datum in self]))
+        result = list(set([datum.model_name for datum in self]))
+        result.sort()
+        return result
 
     @property
     def test_names(self) -> List[str]:
-        return list(set([datum.test_name for datum in self]))
+        result = list(set([datum.test_name for datum in self]))
+        result.sort()
+        return result
+
+    @property
+    def frames(self) -> List[str]:
+        result = list(set([datum.frame for datum in self]))
+        result.sort()
+        return result
 
     @classmethod
     def from_dict_list(cls, dict_list: List[dict]) -> PVNetFrameResultList:
