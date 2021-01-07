@@ -76,7 +76,7 @@ for csv_path in csv_paths:
     test_names.append(test_name)
     datasets.append(dataset)
 
-linemod_dataset = Linemod_Dataset.load_from_path(f'/home/clayton/workspace/prj/data_keep/data/misc_dataset/clayton_datasets/combined/train.json')
+linemod_dataset = Linemod_Dataset.load_from_path(f'/home/clayton/workspace/prj/data/misc_dataset/darwin_datasets/coco2linemod/darwin20210105_blackout/train.json')
 linemod_ann_sample = linemod_dataset.annotations[0]
 kpt_3d = linemod_ann_sample.fps_3d.copy()
 kpt_3d.append(linemod_ann_sample.center_3d)
